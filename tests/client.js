@@ -97,6 +97,43 @@ describe('Client', function () {
     });
 
     describe('Authentication', function () {
+        it('uses timer polling for non-visual authentication readiness checks', async function () {
+            const client = helper.createClient({
+                options: { authTimeoutMs: 1000 },
+            });
+            const waitCalls = [];
+
+            client.pupPage = {
+                waitForFunction: async (predicate, options) => {
+                    waitCalls.push({ predicate, options });
+
+                    return {
+                        jsonValue: async () => ({
+                            need: true,
+                            state: 'UNPAIRED',
+                        }),
+                    };
+                },
+            };
+            client.authStrategy.onAuthenticationNeeded = async () => ({
+                failed: true,
+                failureEventPayload: 'fixture authentication failure',
+                restart: false,
+            });
+
+            await client.inject();
+
+            expect(waitCalls).to.have.length(2);
+            expect(waitCalls[0].options).to.include({
+                timeout: 1000,
+                polling: 200,
+            });
+            expect(waitCalls[1].options).to.include({
+                timeout: 1000,
+                polling: 200,
+            });
+        });
+
         it('should emit QR code if not authenticated', async function () {
             this.timeout(25000);
             const callback = sinon.spy();
